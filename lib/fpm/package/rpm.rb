@@ -191,28 +191,45 @@ class FPM::Package::RPM < FPM::Package
   def rpm_file_entry(file)
     original_file = file
     file = rpm_fix_name(file)
+    attr_string = nil
 
     if !attributes[:rpm_use_file_permissions?]
 
-      if attrs[file].nil?
+      if attrs[file].nil? && attrs["#{file}:recurse"].nil?
         return file
-      else
-        return sprintf("%%attr(%s) %s\n", attrs[file], file)
+      end
+      if ! attrs[file].nil?
+        attr_string = sprintf("%%attr(%s) %s\n", attrs[file], file)
+      elsif ! attrs["#{file}:recurse"].nil?
+        attr_string = sprintf("%%attr(%s) %s\n", attrs["#{file}:recurse"], file)
       end
     end
 
-    return sprintf("%%attr(%s) %s\n", attrs[file], file) unless attrs[file].nil?
+    if attr_string.nil? && ! attrs[file].nil?
+      attr_string = sprintf("%%attr(%s) %s\n", attrs[file], file)
+    end
 
     # Stat the original filename in the relative staging path
-    ::Dir.chdir(staging_path) do
-      stat = File.lstat(original_file.gsub(/\"/, '').sub(/^\//,''))
+    if attr_string.nil?
+      ::Dir.chdir(staging_path) do
+        stat = File.lstat(original_file.gsub(/\"/, '').sub(/^\//,''))
 
-      # rpm_user and rpm_group attribute should override file ownership
-      # otherwise use the current file user/group by name.
-      user = attributes[:rpm_user] || Etc.getpwuid(stat.uid).name
-      group = attributes[:rpm_group] || Etc.getgrgid(stat.gid).name
-      mode = stat.mode
-      return sprintf("%%attr(%o, %s, %s) %s\n", mode & 4095 , user, group, file)
+        # rpm_user and rpm_group attribute should override file ownership
+        # otherwise use the current file user/group by name.
+        user = attributes[:rpm_user] || Etc.getpwuid(stat.uid).name
+        group = attributes[:rpm_group] || Etc.getgrgid(stat.gid).name
+        mode = stat.mode
+        attr_string = sprintf("%%attr(%o, %s, %s) %s\n", mode & 4095 , user, group, file)
+      end
+    end
+
+    # set up prefixes as needed
+    if config_files.include?(file)
+      return "%config(noreplace) #{attr_string}"
+    elsif directories.include?(file) && attrs["#{file}:recurse"].nil?
+      return "%dir #{attr_string}"
+    else
+      return attr_string
     end
   end
 
