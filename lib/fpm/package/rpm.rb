@@ -192,25 +192,33 @@ class FPM::Package::RPM < FPM::Package
     original_file = file
     file = rpm_fix_name(file)
     attr_string = nil
+    attr_string_recurse = nil
 
     if !attributes[:rpm_use_file_permissions?]
 
       if attrs[file].nil? && attrs["#{file}:recurse"].nil?
         return file
       end
-      if ! attrs[file].nil?
-        attr_string = sprintf("%%attr(%s) %s\n", attrs[file], file)
-      elsif ! attrs["#{file}:recurse"].nil?
-        attr_string = sprintf("%%attr(%s) %s\n", attrs["#{file}:recurse"], file)
+
+      if !attrs[file].nil?
+        attr_string = sprintf("%%attr(%s) %s", attrs[file], file)
+      end
+
+      if !attrs["#{file}:recurse"].nil?
+        attr_string_recurse = sprintf("%%attr(%s) %s", attrs["#{file}:recurse"], file)
       end
     end
 
-    if attr_string.nil? && ! attrs[file].nil?
-      attr_string = sprintf("%%attr(%s) %s\n", attrs[file], file)
+    if attr_string.nil? && !attrs[file].nil?
+      attr_string = sprintf("%%attr(%s) %s", attrs[file], file)
+    end
+
+    if attr_string_recurse.nil? && !attrs["#{file}:recurse"].nil?
+      attr_string_recurse = sprintf("%%attr(%s) %s", attrs["#{file}:recurse"], file)
     end
 
     # Stat the original filename in the relative staging path
-    if attr_string.nil?
+    if attr_string.nil? && attr_string_recurse.nil?
       ::Dir.chdir(staging_path) do
         stat = File.lstat(original_file.gsub(/\"/, '').sub(/^\//,''))
 
@@ -226,10 +234,16 @@ class FPM::Package::RPM < FPM::Package
     # set up prefixes as needed
     if config_files.include?(file)
       return "%config(noreplace) #{attr_string}"
-    elsif directories.include?(file) && attrs["#{file}:recurse"].nil?
-      return "%dir #{attr_string}"
+    elsif directories.include?(file)
+      if !attr_string.nil? && !attr_string_recurse.nil?
+        return "#{attr_string_recurse}\n%dir #{attr_string}"
+      elsif ! attr_string.nil?
+        return "%dir #{attr_string}"
+      else
+        return attr_string_recurse || file
+      end
     else
-      return attr_string
+      return attr_string || file
     end
   end
 

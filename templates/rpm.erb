@@ -241,10 +241,21 @@ fi
 
 %files
 %defattr(<%= attributes[:rpm_defattrfile] %>,<%= attributes[:rpm_user] || "root" %>,<%= attributes[:rpm_group] || "root" %>,<%= attributes[:rpm_defattrdir] %>)
+<%# Output config files and then regular files. -%>
+<% config_files.each do |path| -%>
+<%= rpm_file_entry(path) %>
+<% end -%>
+<%# list directories %>
+<% directories.each do |path| -%>
+<%= rpm_file_entry(path) %>
+<% end -%>
+<%# list only files, not directories? -%>
 # Reject config files already listed or parent directories, then prefix files
 # with "/", then make sure paths with spaces are quoted. I hate rpm so much.
 <% files.each do |path| -%>
 <%   path = "/#{path}" -%>
+<%   next if config_files.include?(path)-%>
+<%   next if directories.include?(path)-%>
 <%= rpm_file_entry(path) %>
 <% end -%>
 
